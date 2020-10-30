@@ -1,0 +1,5 @@
+Flask==1.1.2
+flask-restx==0.2.0
+marshmallow==3.8.0
+python==3.8.5
+requests==2.24.0

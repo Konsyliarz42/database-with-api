@@ -1,4 +1,4 @@
-import sqlite3, sys
+import sqlite3, sys, json
 
 #================================================================
 class SQLiteDatabase():
@@ -23,18 +23,28 @@ class SQLiteDatabase():
 
     #--------------------------------
     def connect(self):
-        """Activate connection with database"""
+        """Activate connection with database."""
 
         try:
-            print("Conection to SQLite database...", end=' ')
-            self.connection = sqlite3.connect(self.file)
-            self.cursor     = self.connection.cursor()
+            print("Connection to SQLite database...", end=' ')
+            self.connection             = sqlite3.connect(self.file)
+            self.connection.row_factory = sqlite3.Row
+            self.cursor                 = self.connection.cursor()
         except sys.exc_info()[0] as error:
             print('Error:', error)
         else:
             print("Connected!\n")
         finally:
             return self.connection
+
+    #--------------------------------
+    def disconnect(self):
+        """Deactivate connection with database."""
+
+        if self.connection:
+            print("Disconnected with database")
+            self.connection.close()
+            self.cursor = None
     
     #--------------------------------
     def create_table(self, table_name, *, primary_key='id', **columns):
@@ -53,11 +63,11 @@ class SQLiteDatabase():
         columns_name = ''
 
         # Add id column if not exist
-        if 'id' not in columns:
-            columns_name = '\tid integer'
+    #    if 'id' not in columns:
+    #        columns_name = '\tid integer'
 
-            if primary_key == 'id':
-                columns_name += " PRIMARY KEY"
+    #        if primary_key == 'id':
+    #            columns_name += " PRIMARY KEY"
 
         # Create script
         for col_name, col_type in zip(columns.keys(), columns.values()):
@@ -114,12 +124,13 @@ class SQLiteDatabase():
             print('Error:', error)
 
     #--------------------------------    
-    def select_from_table(self, table_name, **parameters):
+    def select_from_table(self, table_name, select='*', **parameters):
         """Return rows which parameters.
         Requirement:
             table_name  - name of a table
 
         Optional:
+            select      - columns which will be return
             parameters  - conditions of search.
                           
         Return:
@@ -130,9 +141,14 @@ class SQLiteDatabase():
         values      = tuple([value for value in parameters.values()])
         conditions  = '=? AND '.join([name for name in parameters.keys()]) + '=?'
         
+        if type(select) in [list, tuple, set]:
+            select = list(select)
+            select = ', '.join(select)
+
+        
 
         script = f"""
-    SELECT * FROM {table_name}"""
+    SELECT {select.lower()} FROM {table_name}"""
 
         if parameters:
             script  += f" WHERE {conditions}"
@@ -143,8 +159,12 @@ class SQLiteDatabase():
         # Execute script
         try:
             print(msg)
+            
+            self.cursor = self.connection.cursor()
             self.cursor.execute(script, values)
             result = self.cursor.fetchall()
+            result = json.dumps([dict(row) for row in result])
+            result = json.loads(result)
         except sys.exc_info()[0] as error:
             print('Error:', error)
         finally:
@@ -165,15 +185,15 @@ class SQLiteDatabase():
             raise TypeError("update_row() missing 1 required keyword-only argument: 'parameters'")
 
         # Create script
-        columns = '\t    ' + '=?,\n\t    '.join([name for name in parameters.keys()]) + '=?'
-        values  = [primary_key['value']] + [value for value in parameters.values()]
+        columns = ' = ?, '.join([name for name in parameters.keys()]) + ' = ?'
+        values  = [value for value in parameters.values()] + [primary_key['value']]
         values  = tuple(values)
         key     = primary_key['name']
 
         script = f"""
     UPDATE {table_name}
-        SET\n{columns}
-        WHERE {key}=?"""
+        SET {columns}
+        WHERE {key} = ?"""
 
         # Execute script
         try:
@@ -217,20 +237,21 @@ class SQLiteDatabase():
 #================================================================
 if __name__ == '__main__':
     database = SQLiteDatabase(file="")
-
     print(database)
-    connection = database.connect()
 
+    database.connect()
     database.create_table(
         table_name='songs',
         id='integer',
-        song_id='integer',
+        song_id='integer', #primary_key='song_id',
         band='text',
         album='text',
         nr='integer',
         title='text'
     )
+    #database.disconnect()
 
+    #database.connect()
     database.add_to_table(
         table_name='songs',
         song_id=123456789,
@@ -239,23 +260,36 @@ if __name__ == '__main__':
         nr=0,
         title='Title'
     )
+    #database.disconnect()
 
+    #database.connect()
     result = database.select_from_table(
         table_name='songs',
-        id=1
     )
+    #database.disconnect()
     print("Select result:", result, '\n')
 
+    #database.connect()
     database.update_row(
         table_name='songs',
         primary_key={'name':'id', 'value':1},
-        song_id=123456789,
-        album='Album',
+        song_id=987654321,
+        album='xxx',
     )
+    #database.disconnect()
 
+    #database.connect()
+    result = database.select_from_table(
+        table_name='songs',
+    )
+    #database.disconnect()
+    print("Select result:", result, '\n')
+
+    #database.connect()
     database.delete(
         table_name='songs',
-        song_id=123456789
+        song_id=1
     )
+    database.disconnect()
 
-    database.__del__()
+    
